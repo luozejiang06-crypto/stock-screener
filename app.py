@@ -5,12 +5,18 @@ import plotly.graph_objects as go
 from plotly.subplots import make_subplots
 import os
 
-st.set_page_config(page_title="S&P 500 CYBER QUANT TERMINAL", layout="wide", initial_sidebar_state="expanded")
+st.set_page_config(page_title="S&P 500 QUANTITATIVE TERMINAL", layout="wide", initial_sidebar_state="expanded")
 
-# ----------------- 复合暗黑微光与多层渐变 CSS -----------------
+# 高可用金融 Logo 接口
+def get_stock_logo_url(ticker):
+    if pd.isna(ticker) or ticker is None:
+        return "https://ui-avatars.com/api/?name=NA&background=181c26&color=38bdf8&rounded=true"
+    clean_t = str(ticker).replace("-", "").replace(".", "").upper()
+    return f"https://financialmodelingprep.com/image-stock/{clean_t}.png"
+
+# 复合暗黑微光与多层渐变样式
 st.markdown("""
 <style>
-    /* 全局复合渐变背景：深空炭黑 + 暗紫夜空 + 幽蓝渐变 + 极细暗纹 */
     .stApp {
         background-color: #080a0f !important;
         background-image: 
@@ -24,13 +30,11 @@ st.markdown("""
         font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", monospace;
     }
 
-    /* 侧边栏：深色磨砂哑光黑，彻底去除蓝色 */
     section[data-testid="stSidebar"] {
         background-color: #0b0d13 !important;
         border-right: 1px solid rgba(255, 255, 255, 0.08) !important;
     }
 
-    /* 修复多选标签：彻底去除荧光蓝，采用高级哑光炭黑+细边框+纯净白字 */
     div[data-baseweb="select"] span[data-baseweb="tag"],
     span[data-baseweb="tag"] {
         background-color: #181c26 !important;
@@ -47,12 +51,7 @@ st.markdown("""
     span[data-baseweb="tag"] svg {
         fill: #94a3b8 !important;
     }
-    div[data-baseweb="select"] span[data-baseweb="tag"] svg:hover,
-    span[data-baseweb="tag"] svg:hover {
-        fill: #ff4d4f !important;
-    }
 
-    /* 顶部标题渐变：冷银到极光青蓝的高级金属流光 */
     .cyber-title {
         font-size: 2.1rem;
         font-weight: 800;
@@ -71,54 +70,35 @@ st.markdown("""
         margin-bottom: 22px;
     }
 
-    /* 指标卡发光磨砂质感：深邃半透玻璃 */
     div[data-testid="stMetric"] {
         background: rgba(16, 20, 30, 0.65) !important;
         border: 1px solid rgba(56, 189, 248, 0.2) !important;
         border-radius: 8px;
         padding: 12px 18px;
-        box-shadow: 0 4px 20px rgba(0, 0, 0, 0.5), inset 0 0 15px rgba(56, 189, 248, 0.03);
         backdrop-filter: blur(12px);
-    }
-    div[data-testid="stMetric"]:hover {
-        border-color: rgba(56, 189, 248, 0.45) !important;
-        box-shadow: 0 4px 25px rgba(0, 0, 0, 0.6), 0 0 10px rgba(56, 189, 248, 0.15);
-        transition: all 0.25s ease;
-    }
-    div[data-testid="stMetricLabel"] {
-        color: #94a3b8 !important;
-        font-size: 0.8rem !important;
-        text-transform: uppercase;
-        letter-spacing: 1px;
     }
     div[data-testid="stMetricValue"] {
         color: #38bdf8 !important;
-        font-weight: 700 !important;
         text-shadow: 0 0 12px rgba(56, 189, 248, 0.35);
     }
 
-    /* 按钮：流光质感细边框 */
     .stDownloadButton button {
         background: rgba(16, 20, 30, 0.8) !important;
         color: #38bdf8 !important;
         border: 1px solid rgba(56, 189, 248, 0.4) !important;
         border-radius: 6px !important;
-        font-weight: 600 !important;
-        letter-spacing: 0.5px !important;
         transition: 0.2s all;
     }
     .stDownloadButton button:hover {
         background: rgba(56, 189, 248, 0.12) !important;
         border-color: #38bdf8 !important;
-        box-shadow: 0 0 15px rgba(56, 189, 248, 0.25);
         color: #ffffff !important;
     }
 </style>
 """, unsafe_allow_html=True)
 
-# 顶部标题
 st.markdown('<div class="cyber-title">⚡ S&P 500 QUANTITATIVE TERMINAL</div>', unsafe_allow_html=True)
-st.markdown('<div class="cyber-caption">标普500全量智能量化终端 // 多因子筛选与高频交互走势</div>', unsafe_allow_html=True)
+st.markdown('<div class="cyber-caption">标普500全量智能量化终端 // 标的高清图标全覆盖与多因子穿透</div>', unsafe_allow_html=True)
 
 CSV_PATH = "sp500_data.csv"
 
@@ -142,7 +122,7 @@ def load_and_clean_data():
 
 df_raw = load_and_clean_data()
 
-# ----------------- 侧边栏：多维筛选 -----------------
+# 侧边栏
 st.sidebar.markdown("<h4 style='color: #f1f5f9; letter-spacing: 0.5px;'>⚡ 因子控制矩阵</h4>", unsafe_allow_html=True)
 
 all_sectors = sorted([str(s) for s in df_raw["行业板块"].dropna().unique()])
@@ -167,7 +147,7 @@ st.sidebar.markdown("<hr style='border: 1px solid rgba(255,255,255,0.06);'>", un
 st.sidebar.markdown("<span style='color: #94a3b8; font-weight: 600; font-size: 0.85rem;'>📊 技术动量</span>", unsafe_allow_html=True)
 above_50ma = st.sidebar.checkbox("仅筛选站在 50 日均线之上")
 
-# ----------------- 数据过滤 -----------------
+# 数据过滤
 filtered = df_raw.copy()
 
 if selected_sectors:
@@ -188,45 +168,54 @@ if min_dividend > 0:
 if above_50ma:
     filtered = filtered[(filtered["偏离50日线 (%)"].notnull()) & (filtered["偏离50日线 (%)"] > 0)]
 
-# ----------------- 顶部指标看板 -----------------
+# 指标看板
 c1, c2, c3 = st.columns(3)
 c1.metric("标普500 总量池", f"{len(df_raw)} 标的")
-c2.metric("当前匹配标的", f"{len(filtered)} 标的")
+c2.metric("当前符合条件", f"{len(filtered)} 标的")
 c3.metric("有效收敛率", f"{round(len(filtered) / len(df_raw) * 100, 1) if len(df_raw) > 0 else 0}%")
 
 st.markdown("<div style='margin-top: 15px;'></div>", unsafe_allow_html=True)
+st.markdown("<span style='color: #f1f5f9; font-weight: 600;'>📋 量化筛选矩阵 // 标的高清图标</span>", unsafe_allow_html=True)
 
-# ----------------- 筛选结果展示 -----------------
-st.markdown("<span style='color: #f1f5f9; font-weight: 600;'>📋 量化筛选矩阵</span>", unsafe_allow_html=True)
+# 列表展示处理
+display_df = filtered.copy().reset_index(drop=True)
+display_df["标的"] = display_df["代码"].apply(get_stock_logo_url)
+
+cols = ["标的", "代码", "公司名称", "行业板块", "现价 ($)", "市值 (十亿$)", "滚动PE", "ROE (%)", "营收增速 (%)", "股息率 (%)", "偏离50日线 (%)"]
+final_cols = [c for c in cols if c in display_df.columns]
+display_df = display_df[final_cols]
+
 st.dataframe(
-    filtered.style.format({
+    display_df.style.format({
         "现价 ($)": "${:.2f}",
         "市值 (十亿$)": "${:.1f}B",
         "滚动PE": "{:.1f}",
-        "预测PE": "{:.1f}",
-        "PEG": "{:.2f}",
         "ROE (%)": "{:.1f}%",
         "营收增速 (%)": "{:.1f}%",
-        "毛利率 (%)": "{:.1f}%",
-        "资产负债率 (%)": "{:.1f}",
         "股息率 (%)": "{:.2f}%",
         "偏离50日线 (%)": "{:+.2f}%"
     }),
+    column_config={
+        "标的": st.column_config.ImageColumn(label="Logo", width="small"),
+        "代码": st.column_config.TextColumn(label="TICKER", width="small"),
+        "公司名称": st.column_config.TextColumn(label="公司全称", width="medium"),
+        "市值 (十亿$)": st.column_config.NumberColumn(label="市值 (十亿$)", width="small")
+    },
     use_container_width=True,
-    height=360
+    height=380,
+    hide_index=True
 )
 
-# 导出按钮
 st.download_button(
-    label="⚡ 导出筛选数据矩阵 (CSV)",
+    label="⚡ 导出当前筛选数据矩阵 (CSV)",
     data=filtered.to_csv(index=False).encode('utf-8-sig'),
     file_name="SP500_Filtered.csv",
     mime="text/csv"
 )
 
-# ----------------- 个股深度穿透与专业 K 线 -----------------
+# 穿透走势与个股分析
 st.markdown("<hr style='border: 1px solid rgba(255, 255, 255, 0.08); margin-top: 35px; margin-bottom: 25px;'>", unsafe_allow_html=True)
-st.markdown("<h4 style='color: #f1f5f9; letter-spacing: 0.5px;'>🔍 标的穿透分析与交互式 K 线</h4>", unsafe_allow_html=True)
+st.markdown("<h4 style='color: #f1f5f9; letter-spacing: 0.5px;'>🔍 标的穿透分析与专业 K 线走势</h4>", unsafe_allow_html=True)
 
 available_tickers = filtered["代码"].tolist() if len(filtered) > 0 else df_raw["代码"].tolist()
 
@@ -245,12 +234,29 @@ def fetch_kline_data(ticker, period):
 if selected_ticker:
     full_hist = fetch_kline_data(selected_ticker, selected_period)
     stock_info_row = df_raw[df_raw["代码"] == selected_ticker].iloc[0]
+    logo_url = get_stock_logo_url(selected_ticker)
+    company_name = str(stock_info_row["公司名称"])
     
+    st.markdown(f"""
+    <div style="display: flex; align-items: center; gap: 16px; margin-bottom: 20px; background: rgba(16, 20, 30, 0.7); padding: 14px 22px; border-radius: 10px; border: 1px solid rgba(56, 189, 248, 0.2); box-shadow: 0 4px 15px rgba(0,0,0,0.3);">
+        <img src="{logo_url}" onerror="this.onerror=null;this.src='https://ui-avatars.com/api/?name={selected_ticker}&background=181c26&color=38bdf8&rounded=true';" 
+             style="width: 48px; height: 48px; border-radius: 50%; object-fit: contain; background: #ffffff; padding: 5px; border: 1px solid rgba(255,255,255,0.15); box-shadow: 0 0 12px rgba(56, 189, 248, 0.25);">
+        <div>
+            <div style="font-size: 1.5rem; font-weight: 700; color: #f1f5f9; letter-spacing: 0.5px; margin-bottom: 2px;">
+                {selected_ticker} <span style="font-size: 1.1rem; color: #94a3b8; font-weight: 400; margin-left: 10px;">{company_name}</span>
+            </div>
+            <div style="font-size: 0.8rem; color: #38bdf8; text-transform: uppercase; letter-spacing: 1px;">
+                {stock_info_row['行业板块']} // 标普500 成分股 (S&P 500)
+            </div>
+        </div>
+    </div>
+    """, unsafe_allow_html=True)
+
     ic1, ic2, ic3, ic4, ic5 = st.columns(5)
-    ic1.metric("公司全称", str(stock_info_row["公司名称"]))
+    ic1.metric("市值 (十亿$)", f"${stock_info_row['市值 (十亿$)' ]:.1f}B")
     ic2.metric("最新股价", f"${stock_info_row['现价 ($)']:.2f}")
-    ic3.metric("滚动市盈率", f"{stock_info_row['滚动PE']}" if pd.notnull(stock_info_row['滚动PE']) else "--")
-    ic4.metric("ROE", f"{stock_info_row['ROE (%)']}%" if pd.notnull(stock_info_row['ROE (%)']) else "--")
+    ic3.metric("滚动 PE", f"{stock_info_row['滚动PE']}" if pd.notnull(stock_info_row['滚动PE']) else "--")
+    ic4.metric("ROE (净资产收益率)", f"{stock_info_row['ROE (%)']}%" if pd.notnull(stock_info_row['ROE (%)']) else "--")
     div_show = stock_info_row['股息率 (%)']
     ic5.metric("股息率", f"{div_show:.2f}%" if pd.notnull(div_show) else "--")
 
@@ -276,7 +282,7 @@ if selected_ticker:
                 high=stock_hist["High"],
                 low=stock_hist["Low"],
                 close=stock_hist["Close"],
-                name="OHLC",
+                name="K线 (OHLC)",
                 increasing_line_color="#00e676",
                 decreasing_line_color="#ff5252"
             ),
@@ -292,7 +298,6 @@ if selected_ticker:
             row=2, col=1
         )
 
-        # 图表背景：与主体复合渐变自然融为一体的暗黑半透底色
         fig.update_layout(
             paper_bgcolor="rgba(0,0,0,0)",
             plot_bgcolor="rgba(11, 14, 23, 0.75)",
