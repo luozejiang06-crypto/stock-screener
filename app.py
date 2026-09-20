@@ -5,22 +5,130 @@ import plotly.graph_objects as go
 from plotly.subplots import make_subplots
 import os
 
-st.set_page_config(page_title="标普500全量量化筛选器", layout="wide")
+st.set_page_config(page_title="S&P 500 CYBER QUANT TERMINAL", layout="wide", initial_sidebar_state="expanded")
 
-st.title("📊 标普500 全成分股量化筛选器")
-st.caption("完整收录 S&P 500 全部上市公司 | 支持多因子筛选与个股 K 线穿透分析")
+# ----------------- 复合暗黑微光与多层渐变 CSS -----------------
+st.markdown("""
+<style>
+    /* 全局复合渐变背景：深空炭黑 + 暗紫夜空 + 幽蓝渐变 + 极细暗纹 */
+    .stApp {
+        background-color: #080a0f !important;
+        background-image: 
+            radial-gradient(circle at 15% 20%, rgba(20, 24, 45, 0.85) 0%, transparent 45%),
+            radial-gradient(circle at 85% 75%, rgba(10, 30, 45, 0.7) 0%, transparent 50%),
+            radial-gradient(circle at 50% 50%, rgba(13, 16, 26, 0.95) 0%, #05070a 100%),
+            linear-gradient(rgba(255, 255, 255, 0.015) 1px, transparent 1px),
+            linear-gradient(90deg, rgba(255, 255, 255, 0.015) 1px, transparent 1px) !important;
+        background-size: 100% 100%, 100% 100%, 100% 100%, 35px 35px, 35px 35px !important;
+        color: #e2e8f0;
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", monospace;
+    }
+
+    /* 侧边栏：深色磨砂哑光黑，彻底去除蓝色 */
+    section[data-testid="stSidebar"] {
+        background-color: #0b0d13 !important;
+        border-right: 1px solid rgba(255, 255, 255, 0.08) !important;
+    }
+
+    /* 修复多选标签：彻底去除荧光蓝，采用高级哑光炭黑+细边框+纯净白字 */
+    div[data-baseweb="select"] span[data-baseweb="tag"],
+    span[data-baseweb="tag"] {
+        background-color: #181c26 !important;
+        border: 1px solid #2d3748 !important;
+        border-radius: 4px !important;
+    }
+    div[data-baseweb="select"] span[data-baseweb="tag"] span,
+    span[data-baseweb="tag"] span {
+        color: #f1f5f9 !important;
+        font-weight: 500 !important;
+        font-size: 0.82rem !important;
+    }
+    div[data-baseweb="select"] span[data-baseweb="tag"] svg,
+    span[data-baseweb="tag"] svg {
+        fill: #94a3b8 !important;
+    }
+    div[data-baseweb="select"] span[data-baseweb="tag"] svg:hover,
+    span[data-baseweb="tag"] svg:hover {
+        fill: #ff4d4f !important;
+    }
+
+    /* 顶部标题渐变：冷银到极光青蓝的高级金属流光 */
+    .cyber-title {
+        font-size: 2.1rem;
+        font-weight: 800;
+        letter-spacing: 1.5px;
+        background: linear-gradient(90deg, #ffffff 0%, #7dd3fc 60%, #38bdf8 100%);
+        -webkit-background-clip: text;
+        -webkit-text-fill-color: transparent;
+        margin-bottom: 2px;
+    }
+    
+    .cyber-caption {
+        color: #64748b;
+        font-size: 0.82rem;
+        letter-spacing: 1px;
+        text-transform: uppercase;
+        margin-bottom: 22px;
+    }
+
+    /* 指标卡发光磨砂质感：深邃半透玻璃 */
+    div[data-testid="stMetric"] {
+        background: rgba(16, 20, 30, 0.65) !important;
+        border: 1px solid rgba(56, 189, 248, 0.2) !important;
+        border-radius: 8px;
+        padding: 12px 18px;
+        box-shadow: 0 4px 20px rgba(0, 0, 0, 0.5), inset 0 0 15px rgba(56, 189, 248, 0.03);
+        backdrop-filter: blur(12px);
+    }
+    div[data-testid="stMetric"]:hover {
+        border-color: rgba(56, 189, 248, 0.45) !important;
+        box-shadow: 0 4px 25px rgba(0, 0, 0, 0.6), 0 0 10px rgba(56, 189, 248, 0.15);
+        transition: all 0.25s ease;
+    }
+    div[data-testid="stMetricLabel"] {
+        color: #94a3b8 !important;
+        font-size: 0.8rem !important;
+        text-transform: uppercase;
+        letter-spacing: 1px;
+    }
+    div[data-testid="stMetricValue"] {
+        color: #38bdf8 !important;
+        font-weight: 700 !important;
+        text-shadow: 0 0 12px rgba(56, 189, 248, 0.35);
+    }
+
+    /* 按钮：流光质感细边框 */
+    .stDownloadButton button {
+        background: rgba(16, 20, 30, 0.8) !important;
+        color: #38bdf8 !important;
+        border: 1px solid rgba(56, 189, 248, 0.4) !important;
+        border-radius: 6px !important;
+        font-weight: 600 !important;
+        letter-spacing: 0.5px !important;
+        transition: 0.2s all;
+    }
+    .stDownloadButton button:hover {
+        background: rgba(56, 189, 248, 0.12) !important;
+        border-color: #38bdf8 !important;
+        box-shadow: 0 0 15px rgba(56, 189, 248, 0.25);
+        color: #ffffff !important;
+    }
+</style>
+""", unsafe_allow_html=True)
+
+# 顶部标题
+st.markdown('<div class="cyber-title">⚡ S&P 500 QUANTITATIVE TERMINAL</div>', unsafe_allow_html=True)
+st.markdown('<div class="cyber-caption">标普500全量智能量化终端 // 多因子筛选与高频交互走势</div>', unsafe_allow_html=True)
 
 CSV_PATH = "sp500_data.csv"
 
 if not os.path.exists(CSV_PATH):
-    st.warning("⚠️ 尚未检测到本地数据库，请先运行 sync_sp500.py 数据同步脚本！")
+    st.error("SYSTEM ERROR: 数据库未挂载，请先运行数据抓取脚本！")
     st.stop()
 
-# 严密股息率归一化函数（美股标普股息率通常在 0% ~ 10% 之间）
 def clean_dividend(val):
     if pd.isna(val) or val is None or val <= 0:
         return 0.0
-    # 针对 188.0、246.0、360.0 这种百倍异常值除以 100 恢复为 1.88%、2.46%、3.6%
     if val >= 10.0:
         return round(val / 100.0, 2)
     return round(float(val), 2)
@@ -28,43 +136,38 @@ def clean_dividend(val):
 @st.cache_data
 def load_and_clean_data():
     df = pd.read_csv(CSV_PATH)
-    # 全局清洗修复股息率
     if "股息率 (%)" in df.columns:
         df["股息率 (%)"] = df["股息率 (%)"].apply(clean_dividend)
     return df
 
 df_raw = load_and_clean_data()
 
-# ----------------- 侧边栏：多维筛选控件 -----------------
-st.sidebar.header("🛠️ 筛选控制台")
+# ----------------- 侧边栏：多维筛选 -----------------
+st.sidebar.markdown("<h4 style='color: #f1f5f9; letter-spacing: 0.5px;'>⚡ 因子控制矩阵</h4>", unsafe_allow_html=True)
 
-# 1. 行业板块
 all_sectors = sorted([str(s) for s in df_raw["行业板块"].dropna().unique()])
-selected_sectors = st.sidebar.multiselect("行业板块", options=all_sectors, default=all_sectors)
+selected_sectors = st.sidebar.multiselect("行业板块 (SECTOR)", options=all_sectors, default=all_sectors)
 
-# 2. 规模与估值
-st.sidebar.markdown("---")
-st.sidebar.subheader("📌 规模与估值")
+st.sidebar.markdown("<hr style='border: 1px solid rgba(255,255,255,0.06);'>", unsafe_allow_html=True)
+st.sidebar.markdown("<span style='color: #94a3b8; font-weight: 600; font-size: 0.85rem;'>📌 规模与估值模型</span>", unsafe_allow_html=True)
 max_cap = int(df_raw["市值 (十亿$)"].max(skipna=True) or 3000)
 selected_cap = st.sidebar.slider("最低市值 (十亿$)", min_value=0, max_value=max_cap, value=10, step=10)
 max_pe = st.sidebar.slider("最高滚动市盈率 (PE)", min_value=5.0, max_value=120.0, value=60.0, step=2.0)
 
-filter_peg = st.sidebar.checkbox("启用 PEG 过滤 (< 1.5 估值洼地)")
+filter_peg = st.sidebar.checkbox("启用 PEG 估值洼地过滤 (< 1.5)")
 max_peg_val = st.sidebar.slider("最高 PEG 阈值", 0.5, 3.0, 1.5, 0.1) if filter_peg else None
 
-# 3. 盈利质量与成长
-st.sidebar.markdown("---")
-st.sidebar.subheader("📈 质量与成长")
+st.sidebar.markdown("<hr style='border: 1px solid rgba(255,255,255,0.06);'>", unsafe_allow_html=True)
+st.sidebar.markdown("<span style='color: #94a3b8; font-weight: 600; font-size: 0.85rem;'>📈 盈利质量与成长</span>", unsafe_allow_html=True)
 min_roe = st.sidebar.slider("最低 ROE (%)", -20.0, 60.0, 10.0, step=2.0)
 min_growth = st.sidebar.slider("最低营收增长率 (%)", -20.0, 60.0, 0.0, step=2.0)
 min_dividend = st.sidebar.slider("最低股息率 (%)", 0.0, 8.0, 0.0, step=0.2)
 
-# 4. 动量趋势
-st.sidebar.markdown("---")
-st.sidebar.subheader("📊 技术动量")
-above_50ma = st.sidebar.checkbox("仅筛选股价在 50 日均线之上")
+st.sidebar.markdown("<hr style='border: 1px solid rgba(255,255,255,0.06);'>", unsafe_allow_html=True)
+st.sidebar.markdown("<span style='color: #94a3b8; font-weight: 600; font-size: 0.85rem;'>📊 技术动量</span>", unsafe_allow_html=True)
+above_50ma = st.sidebar.checkbox("仅筛选站在 50 日均线之上")
 
-# ----------------- 筛选逻辑执行 -----------------
+# ----------------- 数据过滤 -----------------
 filtered = df_raw.copy()
 
 if selected_sectors:
@@ -85,14 +188,16 @@ if min_dividend > 0:
 if above_50ma:
     filtered = filtered[(filtered["偏离50日线 (%)"].notnull()) & (filtered["偏离50日线 (%)"] > 0)]
 
-# ----------------- 顶部数据指标卡 -----------------
+# ----------------- 顶部指标看板 -----------------
 c1, c2, c3 = st.columns(3)
-c1.metric("标普500 基础池", f"{len(df_raw)} 只")
-c2.metric("当前符合条件", f"{len(filtered)} 只")
-c3.metric("入围占比", f"{round(len(filtered) / len(df_raw) * 100, 1) if len(df_raw) > 0 else 0}%")
+c1.metric("标普500 总量池", f"{len(df_raw)} 标的")
+c2.metric("当前匹配标的", f"{len(filtered)} 标的")
+c3.metric("有效收敛率", f"{round(len(filtered) / len(df_raw) * 100, 1) if len(df_raw) > 0 else 0}%")
 
-# ----------------- 筛选结果表格展示 -----------------
-st.markdown("### 📋 标的筛选结果")
+st.markdown("<div style='margin-top: 15px;'></div>", unsafe_allow_html=True)
+
+# ----------------- 筛选结果展示 -----------------
+st.markdown("<span style='color: #f1f5f9; font-weight: 600;'>📋 量化筛选矩阵</span>", unsafe_allow_html=True)
 st.dataframe(
     filtered.style.format({
         "现价 ($)": "${:.2f}",
@@ -108,55 +213,59 @@ st.dataframe(
         "偏离50日线 (%)": "{:+.2f}%"
     }),
     use_container_width=True,
-    height=380
+    height=360
 )
 
 # 导出按钮
 st.download_button(
-    label="📥 导出筛选结果为 CSV",
+    label="⚡ 导出筛选数据矩阵 (CSV)",
     data=filtered.to_csv(index=False).encode('utf-8-sig'),
-    file_name="标普500筛选结果.csv",
+    file_name="SP500_Filtered.csv",
     mime="text/csv"
 )
 
-# ----------------- 个股深度穿透与交互式 K 线 -----------------
-st.markdown("---")
-st.subheader("🔍 个股深度穿透与交互式 K 线")
+# ----------------- 个股深度穿透与专业 K 线 -----------------
+st.markdown("<hr style='border: 1px solid rgba(255, 255, 255, 0.08); margin-top: 35px; margin-bottom: 25px;'>", unsafe_allow_html=True)
+st.markdown("<h4 style='color: #f1f5f9; letter-spacing: 0.5px;'>🔍 标的穿透分析与交互式 K 线</h4>", unsafe_allow_html=True)
 
 available_tickers = filtered["代码"].tolist() if len(filtered) > 0 else df_raw["代码"].tolist()
 
 col_select, col_period = st.columns([2, 1])
 with col_select:
-    selected_ticker = st.selectbox("选择要分析穿透的股票代码：", options=available_tickers, index=0)
+    selected_ticker = st.selectbox("选择股票代码：", options=available_tickers, index=0)
 with col_period:
-    selected_period = st.selectbox("选择历史走势时间范围：", options=["1mo", "3mo", "6mo", "1y", "2y", "5y"], index=3)
+    selected_period = st.selectbox("走势周期：", options=["1mo", "3mo", "6mo", "1y", "2y", "5y"], index=3)
 
 @st.cache_data(ttl=1800)
 def fetch_kline_data(ticker, period):
     t = yf.Ticker(ticker)
-    return t.history(period=period)
+    buffer_hist = t.history(period="max" if period == "5y" else "2y")
+    return buffer_hist
 
 if selected_ticker:
-    stock_hist = fetch_kline_data(selected_ticker, selected_period)
+    full_hist = fetch_kline_data(selected_ticker, selected_period)
     stock_info_row = df_raw[df_raw["代码"] == selected_ticker].iloc[0]
     
     ic1, ic2, ic3, ic4, ic5 = st.columns(5)
-    ic1.metric("公司名称", str(stock_info_row["公司名称"]))
-    ic2.metric("当前股价", f"${stock_info_row['现价 ($)']:.2f}")
-    ic3.metric("滚动 PE", f"{stock_info_row['滚动PE']}" if pd.notnull(stock_info_row['滚动PE']) else "--")
+    ic1.metric("公司全称", str(stock_info_row["公司名称"]))
+    ic2.metric("最新股价", f"${stock_info_row['现价 ($)']:.2f}")
+    ic3.metric("滚动市盈率", f"{stock_info_row['滚动PE']}" if pd.notnull(stock_info_row['滚动PE']) else "--")
     ic4.metric("ROE", f"{stock_info_row['ROE (%)']}%" if pd.notnull(stock_info_row['ROE (%)']) else "--")
-    
     div_show = stock_info_row['股息率 (%)']
     ic5.metric("股息率", f"{div_show:.2f}%" if pd.notnull(div_show) else "--")
 
-    if not stock_hist.empty:
-        stock_hist["MA20"] = stock_hist["Close"].rolling(window=20).mean()
-        stock_hist["MA50"] = stock_hist["Close"].rolling(window=50).mean()
+    if not full_hist.empty:
+        full_hist["MA20"] = full_hist["Close"].rolling(window=20).mean()
+        full_hist["MA50"] = full_hist["Close"].rolling(window=50).mean()
+
+        period_days = {"1mo": 30, "3mo": 90, "6mo": 180, "1y": 365, "2y": 730, "5y": 1825}
+        days = period_days.get(selected_period, 365)
+        stock_hist = full_hist.tail(days).copy()
 
         fig = make_subplots(
             rows=2, cols=1,
             shared_xaxes=True,
-            vertical_spacing=0.05,
+            vertical_spacing=0.03,
             row_heights=[0.75, 0.25]
         )
 
@@ -167,30 +276,53 @@ if selected_ticker:
                 high=stock_hist["High"],
                 low=stock_hist["Low"],
                 close=stock_hist["Close"],
-                name="K线 (OHLC)",
-                increasing_line_color="#26a69a",
-                decreasing_line_color="#ef5350"
+                name="OHLC",
+                increasing_line_color="#00e676",
+                decreasing_line_color="#ff5252"
             ),
             row=1, col=1
         )
 
-        fig.add_trace(go.Scatter(x=stock_hist.index, y=stock_hist["MA20"], line=dict(color="#f39c12", width=1.5), name="MA20 (月线)"), row=1, col=1)
-        fig.add_trace(go.Scatter(x=stock_hist.index, y=stock_hist["MA50"], line=dict(color="#3498db", width=1.5), name="MA50 (季线)"), row=1, col=1)
+        fig.add_trace(go.Scatter(x=stock_hist.index, y=stock_hist["MA20"], line=dict(color="#fadb14", width=1.6), name="MA20 (月线)"), row=1, col=1)
+        fig.add_trace(go.Scatter(x=stock_hist.index, y=stock_hist["MA50"], line=dict(color="#38bdf8", width=1.6), name="MA50 (季线)"), row=1, col=1)
 
-        colors = ["#26a69a" if c >= o else "#ef5350" for c, o in zip(stock_hist["Close"], stock_hist["Open"])]
+        colors = ["rgba(0, 230, 118, 0.55)" if c >= o else "rgba(255, 82, 82, 0.55)" for c, o in zip(stock_hist["Close"], stock_hist["Open"])]
         fig.add_trace(
-            go.Bar(x=stock_hist.index, y=stock_hist["Volume"], marker_color=colors, name="成交量 (Volume)"),
+            go.Bar(x=stock_hist.index, y=stock_hist["Volume"], marker_color=colors, name="成交量", showlegend=False),
             row=2, col=1
         )
 
+        # 图表背景：与主体复合渐变自然融为一体的暗黑半透底色
         fig.update_layout(
+            paper_bgcolor="rgba(0,0,0,0)",
+            plot_bgcolor="rgba(11, 14, 23, 0.75)",
             height=600,
-            margin=dict(l=20, r=20, t=30, b=20),
+            margin=dict(l=10, r=20, t=25, b=10),
             xaxis_rangeslider_visible=False,
-            hovermode="x unified"
+            hovermode="x unified",
+            font=dict(color="#94a3b8", family="monospace"),
+            legend=dict(
+                orientation="h",
+                yanchor="bottom",
+                y=1.02,
+                xanchor="right",
+                x=1,
+                bgcolor="rgba(0,0,0,0)"
+            )
         )
-        fig.update_yaxes(title_text="价格 ($)", row=1, col=1)
-        fig.update_yaxes(title_text="成交量", row=2, col=1)
+
+        fig.update_xaxes(
+            rangebreaks=[dict(bounds=["sat", "mon"])],
+            showgrid=True,
+            gridwidth=1,
+            gridcolor="rgba(255, 255, 255, 0.04)"
+        )
+        fig.update_yaxes(
+            showgrid=True,
+            gridwidth=1,
+            gridcolor="rgba(255, 255, 255, 0.04)",
+            side="right"
+        )
 
         st.plotly_chart(fig, use_container_width=True)
     else:
