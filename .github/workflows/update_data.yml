@@ -1,0 +1,35 @@
+name: 自动更新美股标普500数据
+
+on:
+  schedule:
+    # 设定定时任务：每周二至周六 凌晨 05:30 (北京时间) 自动执行，对应美股周一至周五收盘
+    - cron: '30 21 * * 1-5'
+  workflow_dispatch: # 同时也支持你在 GitHub 网页上随时手动点击一键触发更新
+
+jobs:
+  update-stock-data:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: 检出仓库代码
+        uses: actions/checkout@v4
+
+      - name: 配置 Python 环境
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: 安装抓取依赖
+        run: |
+          pip install pandas yfinance requests lxml html5lib
+
+      - name: 运行全量数据同步
+        run: |
+          python sync_sp500.py
+
+      - name: 自动将最新数据提交并推送到仓库
+        run: |
+          git config --global user.name "Stock-Data-Bot"
+          git config --global user.email "bot@github.com"
+          git add sp500_data.csv
+          git diff --quiet && git diff --staged --quiet || (git commit -m "🤖 自动同步最新美股行情数据 [skip ci]" && git push)
