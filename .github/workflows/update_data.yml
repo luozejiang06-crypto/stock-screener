@@ -2,9 +2,13 @@ name: 自动更新美股标普500数据
 
 on:
   schedule:
-    # 设定定时任务：每周二至周六 凌晨 05:30 (北京时间) 自动执行，对应美股周一至周五收盘
-    - cron: '30 21 * * 1-5'
-  workflow_dispatch: # 同时也支持你在 GitHub 网页上随时手动点击一键触发更新
+    # 每周二至周六 凌晨 07:30 (北京时间) / 08:30 (东京时间) 执行
+    # 对应美股周一至周五全部盘后清算结束后的稳定时间窗口
+    - cron: '30 23 * * 1-5'
+  workflow_dispatch: # 支持在 GitHub 网页上手动随时一键运行
+
+permissions:
+  contents: write # 显式赋予 GitHub Actions 写入与推送权限
 
 jobs:
   update-stock-data:
@@ -32,4 +36,5 @@ jobs:
           git config --global user.name "Stock-Data-Bot"
           git config --global user.email "bot@github.com"
           git add sp500_data.csv
-          git diff --quiet && git diff --staged --quiet || (git commit -m "🤖 自动同步最新美股行情数据 [skip ci]" && git push)
+          # 若数据有变动则提交并推送，附带触发 Streamlit 云端自动重新拉取
+          git diff --staged --quiet || (git commit -m "🤖 自动同步最新美股行情数据 [skip ci]" && git push)
