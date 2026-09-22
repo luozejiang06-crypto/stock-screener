@@ -1,64 +1,87 @@
-import io
+import os
 import requests
 import pandas as pd
 import yfinance as yf
+from datetime import datetime
 
-print(">>> 1. 正在获取维基百科最新标普500全量成分股名单...")
+def get_sp500_tickers():
+    """从维基百科获取最新标普500成分股列表"""
+    url = "https://en.wikipedia.org/wiki/List_of_S%26P_500_companies"
+    headers = {"User-Agent": "Mozilla/5.0"}
+    res = requests.get(url, headers=headers)
+    tables = pd.read_html(res.text)
+    df = tables[0]
+    
+    # 统一字段命名
+    df = df[['Symbol', 'Security', 'GICS Sector']].copy()
+    df.columns = ['代码', '公司名称', '行业板块']
+    df['代码'] = df['代码'].str.replace('.', '-', regex=False)
+    return df
 
-url = "https://en.wikipedia.org/wiki/List_of_S%26P_500_companies"
-# 添加浏览器 User-Agent，避免 403 拦截
-headers = {
-    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
-}
-
-response = requests.get(url, headers=headers)
-response.raise_for_status()
-
-# 解析 HTML 表格
-tables = pd.read_html(io.StringIO(response.text))
-sp500_table = tables[0]
-
-# 提取股票代码与公司名称、行业
-tickers = sp500_table["Symbol"].str.replace(".", "-", regex=False).tolist()
-sector_map = dict(zip(tickers, sp500_table["GICS Sector"]))
-name_map = dict(zip(tickers, sp500_table["Security"]))
-
-print(f">>> 成功获取 {len(tickers)} 只标普500股票清单！")
-print(">>> 2. 正在批量拉取核心行情与财务指标（需数分钟，请耐心等待）...")
-
-records = []
-total = len(tickers)
-
-for idx, ticker in enumerate(tickers, 1):
+def fetch_single_ticker(ticker):
+    """安全拉取单只股票量化因子与最新收盘价"""
     try:
         t = yf.Ticker(ticker)
-        info = t.info
-        current_price = info.get("currentPrice") or info.get("regularMarketPrice") or info.get("previousClose", 0.0)
-        fifty_ma = info.get("fiftyDayAverage", None)
-        ma50_pct = round(((current_price - fifty_ma) / fifty_ma) * 100, 2) if fifty_ma and current_price else None
+        # 取最近 5 天历史数据，确保永远取到最新结算收盘日
+        hist = t.history(period="5d")
+        if hist.empty:
+            return None
+        
+        last_close = float(hist['Close'].dropna().iloc[-1])
+        
+        # 计算 50 日均线偏离度（若历史够长）
+        hist_long = t.history(period="3mo")
+        dev_50ma = None
+        if len(hist_long) >= 50:
+            ma50 = hist_long['Close'].rolling(50).mean().iloc[-1]
+            dev_50ma = round(((last_close - ma50) / ma50) * 100, 2)
 
-        records.append({
-            "代码": ticker,
-            "公司名称": name_map.get(ticker, info.get("shortName", ticker)),
-            "行业板块": sector_map.get(ticker, info.get("sector", "其他")),
-            "现价 ($)": current_price,
-            "市值 (十亿$)": round(info.get("marketCap", 0) / 1e9, 2) if info.get("marketCap") else None,
-            "滚动PE": round(info.get("trailingPE"), 2) if info.get("trailingPE") else None,
-            "预测PE": round(info.get("forwardPE"), 2) if info.get("forwardPE") else None,
-            "PEG": round(info.get("pegRatio"), 2) if info.get("pegRatio") else None,
-            "ROE (%)": round(info.get("returnOnEquity", 0) * 100, 2) if info.get("returnOnEquity") else None,
-            "营收增速 (%)": round(info.get("revenueGrowth", 0) * 100, 2) if info.get("revenueGrowth") else None,
-            "毛利率 (%)": round(info.get("grossMargins", 0) * 100, 2) if info.get("grossMargins") else None,
-            "资产负债率 (%)": round(info.get("debtToEquity", 0), 2) if info.get("debtToEquity") else None,
-            "股息率 (%)": round(info.get("dividendYield", 0) * 100, 2) if info.get("dividendYield") else 0.0,
-            "偏离50日线 (%)": ma50_pct
-        })
+        info = t.info or {}
+        
+        market_cap = info.get('marketCap')
+        cap_b = round(market_cap / 1e9, 2) if market_cap else None
+        pe = info.get('trailingPE')
+        pe = round(pe, 2) if pe else None
+        peg = info.get('pegRatio')
+        peg = round(peg, 2) if peg else None
+        roe = info.get('returnOnEquity')
+        roe = round(roe * 100, 2) if roe else None
+        rev_growth = info.get('revenueGrowth')
+        rev_growth = round(rev_growth * 100, 2) if rev_growth else None
+        div_yield = info.get('dividendYield')
+        div_yield = round(div_yield * 100, 2) if div_yield else 0.0
+
+        return {
+            "现价 ($)": round(last_close, 2),
+            "市值 (十亿$)": cap_b,
+            "滚动PE": pe,
+            "PEG": peg,
+            "ROE (%)": roe,
+            "营收增速 (%)": rev_growth,
+            "股息率 (%)": div_yield,
+            "偏离50日线 (%)": dev_50ma
+        }
     except Exception:
-        continue
+        return None
 
-    if idx % 25 == 0 or idx == total:
-        print(f"进度: {idx}/{total} (已完成 {round(idx/total*100, 1)}%)")
+def main():
+    print(f"[{datetime.now()}] 开始同步标普500成分股最新行情与因子...")
+    base_df = get_sp500_tickers()
+    
+    results = []
+    for idx, row in base_df.iterrows():
+        ticker = row['代码']
+        data = fetch_single_ticker(ticker)
+        if data:
+            combined = {**row.to_dict(), **data}
+            results.append(combined)
+            print(f"[{idx+1}/{len(base_df)}] {ticker} 同步完成: ${data['现价 ($)']}")
+        else:
+            print(f"[{idx+1}/{len(base_df)}] {ticker} 抓取跳过")
+            
+    final_df = pd.DataFrame(results)
+    final_df.to_csv("sp500_data.csv", index=False, encoding="utf-8-sig")
+    print(f"[{datetime.now()}] 同步成功！共保存 {len(final_df)} 只标的至 sp500_data.csv")
 
-df = pd.DataFrame(records)
-df.to_csv("sp500_data.csv", index=False, encoding="utf-8-sig")
-print(">>> 全量数据采集完毕！已成功保存至本地 sp500_data.csv！")
+if __name__ == "__main__":
+    main()
