@@ -367,7 +367,8 @@ with tab_screener:
 
         # 核心指标看板
         col_k1, col_k2, col_k3, col_k4, col_k5 = st.columns(5)
-        col_k1.metric("最新股价", f"${stock_info_row['现价 ($)']:.2f}")
+        realtime_price = full_hist['Close'].dropna().iloc[-1] if not full_hist.empty else stock_info_row['现价 ($)']
+        col_k1.metric("最新股价", f"${realtime_price:.2f}")
         col_k2.metric("总市值", f"${stock_info_row['市值 (十亿$)' ]:.1f}B")
         col_k3.metric("滚动 PE", f"{stock_info_row['滚动PE']}" if pd.notnull(stock_info_row['滚动PE']) else "--")
         col_k4.metric("ROE (净资产收益率)", f"{stock_info_row['ROE (%)']}%" if pd.notnull(stock_info_row['ROE (%)']) else "--")
