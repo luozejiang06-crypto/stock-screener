@@ -210,14 +210,28 @@ st.sidebar.markdown("<hr style='border: 1px solid rgba(255,255,255,0.06);'>", un
 st.sidebar.markdown("<span style='color: #94a3b8; font-weight: 600; font-size: 0.85rem;'>📌 规模与估值模型</span>", unsafe_allow_html=True)
 max_cap = int(df_raw["市值 (十亿$)"].max(skipna=True) or 3000)
 selected_cap = st.sidebar.slider("最低市值 (十亿$)", min_value=0, max_value=max_cap, value=10, step=10)
-max_pe = st.sidebar.slider("最高滚动市盈率 (PE)", min_value=5.0, max_value=120.0, value=60.0, step=2.0)
 
-filter_peg = st.sidebar.checkbox("启用 PEG 估值洼地过滤 (< 1.5)")
-max_peg_val = st.sidebar.slider("最高 PEG 阈值", 0.5, 3.0, 1.5, 0.1) if filter_peg else None
+# 亏损企业筛选开关
+only_loss_making = st.sidebar.checkbox("🚨 仅查看当前亏损企业 (PE为N/A 或 ROE<0)", value=False)
+
+if not only_loss_making:
+    max_pe = st.sidebar.slider("最高滚动市盈率 (PE)", min_value=5.0, max_value=120.0, value=60.0, step=2.0)
+    filter_peg = st.sidebar.checkbox("启用 PEG 估值洼地过滤 (< 1.5)")
+    max_peg_val = st.sidebar.slider("最高 PEG 阈值", 0.5, 3.0, 1.5, 0.1) if filter_peg else None
+else:
+    max_pe = None
+    filter_peg = False
+    max_peg_val = None
 
 st.sidebar.markdown("<hr style='border: 1px solid rgba(255,255,255,0.06);'>", unsafe_allow_html=True)
 st.sidebar.markdown("<span style='color: #94a3b8; font-weight: 600; font-size: 0.85rem;'>📈 盈利质量与成长</span>", unsafe_allow_html=True)
-min_roe = st.sidebar.slider("最低 ROE (%)", -20.0, 60.0, 10.0, step=2.0)
+
+if not only_loss_making:
+    min_roe = st.sidebar.slider("最低 ROE (%)", -20.0, 60.0, 10.0, step=2.0)
+else:
+    min_roe = None
+    st.sidebar.caption("⚠️ 已开启亏损企业模式：已放开 ROE 限制")
+
 min_growth = st.sidebar.slider("最低营收增长率 (%)", -20.0, 60.0, 0.0, step=2.0)
 min_dividend = st.sidebar.slider("最低股息率 (%)", 0.0, 8.0, 0.0, step=0.2)
 
@@ -235,12 +249,21 @@ if selected_sectors:
     filtered = filtered[filtered["行业板块"].isin(selected_sectors)]
 
 filtered = filtered[(filtered["市值 (十亿$)"].notnull()) & (filtered["市值 (十亿$)"] >= selected_cap)]
-filtered = filtered[(filtered["滚动PE"].isnull()) | (filtered["滚动PE"] <= max_pe)]
 
-if filter_peg and max_peg_val:
-    filtered = filtered[(filtered["PEG"].notnull()) & (filtered["PEG"] <= max_peg_val)]
+if only_loss_making:
+    is_loss = (
+        filtered["滚动PE"].isnull() | 
+        (filtered["滚动PE"] < 0) | 
+        (filtered["ROE (%)"] < 0)
+    )
+    filtered = filtered[is_loss]
+else:
+    filtered = filtered[(filtered["滚动PE"].isnull()) | (filtered["滚动PE"] <= max_pe)]
+    if filter_peg and max_peg_val:
+        filtered = filtered[(filtered["PEG"].notnull()) & (filtered["PEG"] <= max_peg_val)]
+    if min_roe is not None:
+        filtered = filtered[(filtered["ROE (%)"].isnull()) | (filtered["ROE (%)"] >= min_roe)]
 
-filtered = filtered[(filtered["ROE (%)"].isnull()) | (filtered["ROE (%)"] >= min_roe)]
 filtered = filtered[(filtered["营收增速 (%)"].isnull()) | (filtered["营收增速 (%)"] >= min_growth)]
 
 if min_dividend > 0:
@@ -269,11 +292,11 @@ st.dataframe(
     display_df.style.format({
         "现价 ($)": "${:.2f}",
         "市值 (十亿$)": "${:.1f}B",
-        "滚动PE": "{:.1f}",
-        "ROE (%)": "{:.1f}%",
-        "营收增速 (%)": "{:.1f}%",
+        "滚动PE": lambda x: f"{x:.1f}" if pd.notnull(x) else "N/A",
+        "ROE (%)": lambda x: f"{x:.1f}%" if pd.notnull(x) else "--",
+        "营收增速 (%)": lambda x: f"{x:.1f}%" if pd.notnull(x) else "--",
         "股息率 (%)": "{:.2f}%",
-        "偏离50日线 (%)": "{:+.2f}%"
+        "偏离50日线 (%)": lambda x: f"{x:+.2f}%" if pd.notnull(x) else "--"
     }),
     column_config={
         "标的": st.column_config.ImageColumn(label="Logo", width="small"),
@@ -356,12 +379,18 @@ if selected_ticker:
     else:
         rsi_str = "--"
 
+    pe_val = stock_info_row['滚动PE']
+    pe_display = f"{pe_val:.1f}" if pd.notnull(pe_val) else "N/A"
+
+    roe_val = stock_info_row['ROE (%)']
+    roe_display = f"{roe_val:.1f}%" if pd.notnull(roe_val) else "--"
+
     # 第一层指标看板（实时最新价绑定）
     col_k1, col_k2, col_k3, col_k4, col_k5 = st.columns(5)
     col_k1.metric("最新股价", f"${current_price:.2f}" if current_price else "--")
     col_k2.metric("总市值", f"${stock_info_row['市值 (十亿$)' ]:.1f}B" if pd.notnull(stock_info_row['市值 (十亿$)']) else "--")
-    col_k3.metric("滚动 PE", f"{stock_info_row['滚动PE']}" if pd.notnull(stock_info_row['滚动PE']) else "--")
-    col_k4.metric("ROE (净资产收益率)", f"{stock_info_row['ROE (%)']}%" if pd.notnull(stock_info_row['ROE (%)']) else "--")
+    col_k3.metric("滚动 PE", pe_display)
+    col_k4.metric("ROE (净资产收益率)", roe_display)
     col_k5.metric("股息率", f"{stock_info_row['股息率 (%)']:.2f}%" if pd.notnull(stock_info_row['股息率 (%)']) else "--")
 
     # 第二层专属深度指标（Beta 波动系数 + RSI 相对强弱 + 52周高低）
