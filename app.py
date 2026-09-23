@@ -237,7 +237,7 @@ min_dividend = st.sidebar.slider("最低股息率 (%)", 0.0, 8.0, 0.0, step=0.2)
 
 st.sidebar.markdown("<hr style='border: 1px solid rgba(255,255,255,0.06);'>", unsafe_allow_html=True)
 st.sidebar.markdown("<span style='color: #94a3b8; font-weight: 600; font-size: 0.85rem;'>📊 技术动量</span>", unsafe_allow_html=True)
-above_50ma = st.sidebar.checkbox("仅筛选站在 50 日均线之上")
+above_50ma = st.sidebar.checkbox("仅站在 50 日均线之上")
 
 st.sidebar.markdown("<br><br><hr style='border: 1px solid rgba(255,255,255,0.06);'>", unsafe_allow_html=True)
 st.sidebar.markdown("<div style='color: #64748b; font-size: 0.78rem; text-align: center;'>Architecture & Engineering<br><span style='color: #38bdf8; font-weight: 600;'>@lzjppy</span></div>", unsafe_allow_html=True)
@@ -277,9 +277,6 @@ c1, c2, c3 = st.columns(3)
 c1.metric("标普500 总量池", f"{len(df_raw)} 标的")
 c2.metric("当前符合条件", f"{len(filtered)} 标的")
 c3.metric("有效收敛率", f"{round(len(filtered) / len(df_raw) * 100, 1) if len(df_raw) > 0 else 0}%")
-
-st.markdown("<div style='margin-top: 15px;'></div>", unsafe_allow_html=True)
-st.markdown("<span style='color: #f1f5f9; font-weight: 600;'>📋 量化筛选矩阵 // 标的高清图标</span>", unsafe_allow_html=True)
 
 display_df = filtered.copy().reset_index(drop=True)
 display_df["标的"] = display_df["代码"].apply(get_stock_logo_url)
