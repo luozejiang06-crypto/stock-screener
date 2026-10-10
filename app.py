@@ -7,23 +7,23 @@ from plotly.subplots import make_subplots
 import os
 from deep_translator import MyMemoryTranslator, GoogleTranslator
 
-st.set_page_config(page_title="S&P 500 QUANTITATIVE TERMINAL", layout="wide", initial_sidebar_state="expanded")
+st.set_page_config(page_title="S&P 500 Equity Screener", layout="wide", initial_sidebar_state="expanded")
 
-# 高可用金融 Logo 接口
+# 股票 Logo 接口
 def get_stock_logo_url(ticker):
     if pd.isna(ticker) or ticker is None:
         return "https://ui-avatars.com/api/?name=NA&background=181c26&color=38bdf8&rounded=true"
     clean_t = str(ticker).replace("-", "").replace(".", "").upper()
     return f"https://financialmodelingprep.com/image-stock/{clean_t}.png"
 
-# 动态获取公司业务简介：优先免翻直连通道翻译，带原文对照
+# 获取公司业务简介
 @st.cache_data(ttl=604800)
 def get_company_summary_zh(ticker):
     try:
         t = yf.Ticker(ticker)
         raw_summary = t.info.get("longBusinessSummary", "")
         if not raw_summary:
-            return "暂无该公司业务详细介绍。"
+            return "暂无业务介绍。"
         
         trimmed = raw_summary[:350] + "..." if len(raw_summary) > 350 else raw_summary
         translated = ""
@@ -40,13 +40,13 @@ def get_company_summary_zh(ticker):
                 pass
 
         if translated and translated != trimmed:
-            return f"【中文业务速览】\n{translated}\n\n---\n【官方英文完整介绍】\n{raw_summary}"
+            return f"{translated}\n\n---\n【英文原文】\n{raw_summary}"
         else:
-            return f"【官方主营业务简介 (英文原文)】\n\n{raw_summary}"
+            return raw_summary
     except Exception:
-        return "暂无该公司业务详细介绍。"
+        return "暂无业务介绍。"
 
-# 计算 RSI 相对强弱指标（纯量化算法，14周期）
+# 计算 RSI (14周期)
 def calculate_rsi(series, period=14):
     delta = series.diff()
     gain = (delta.where(delta > 0, 0)).rolling(window=period).mean()
@@ -55,7 +55,7 @@ def calculate_rsi(series, period=14):
     rsi = 100 - (100 / (1 + rs))
     return rsi
 
-# 精准修复股息率异常逻辑（识别小数与误放大的情况）
+# 股息率清洗逻辑
 def clean_dividend(val):
     if pd.isna(val) or val is None:
         return 0.0
@@ -63,155 +63,107 @@ def clean_dividend(val):
         val = float(val)
         if val <= 0:
             return 0.0
-        
-        # 1. 如果原始值是非常小的纯小数（如 0.0188 表示 1.88%，0.0006 表示 0.06%）
         if val < 0.08:
             return round(val * 100.0, 2)
-            
-        # 2. 如果原始值处于 0.08 到 1.0 之间，说明是已经被算成 0.11%、0.06% 的正常百分比，直接保留
         if 0.08 <= val <= 1.0:
             return round(val, 2)
-            
-        # 3. 核心修复：标普500常规现金股息率极少有长期高于 8% 的（除了个别高息 REITs/烟草如 MO 约 6~7%）
-        # 针对 JBL(11%)、TXT(11%)、VRT(10%)、MRVL(9%)、MU(6%) 这种科技/成长股被放大了100倍的数据做纠偏：
         if val >= 5.0 and val in [6.0, 9.0, 10.0, 11.0, 12.0, 14.0]:
             return round(val / 100.0, 2)
-            
-        # 4. 如果数值超过 12%（例如误传成了 100 多），统一降级除以 100
         if val > 12.0:
             return round(val / 100.0, 2)
-            
         return round(val, 2)
     except Exception:
         return 0.0
 
-# 复合暗黑微光与多层渐变样式
+# 界面极简暗黑样式
 st.markdown("""
 <style>
     .stApp {
-        background-color: #080a0f !important;
-        background-image: 
-            radial-gradient(circle at 15% 20%, rgba(20, 24, 45, 0.85) 0%, transparent 45%),
-            radial-gradient(circle at 85% 75%, rgba(10, 30, 45, 0.7) 0%, transparent 50%),
-            radial-gradient(circle at 50% 50%, rgba(13, 16, 26, 0.95) 0%, #05070a 100%),
-            linear-gradient(rgba(255, 255, 255, 0.015) 1px, transparent 1px),
-            linear-gradient(90deg, rgba(255, 255, 255, 0.015) 1px, transparent 1px) !important;
-        background-size: 100% 100%, 100% 100%, 100% 100%, 35px 35px, 35px 35px !important;
+        background-color: #0b0e14 !important;
         color: #e2e8f0;
-        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", monospace;
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", sans-serif;
     }
 
     section[data-testid="stSidebar"] {
-        background-color: #0b0d13 !important;
-        border-right: 1px solid rgba(255, 255, 255, 0.08) !important;
+        background-color: #11151c !important;
+        border-right: 1px solid #1e2430 !important;
     }
 
     div[data-baseweb="select"] span[data-baseweb="tag"],
     span[data-baseweb="tag"] {
-        background-color: #181c26 !important;
+        background-color: #1a202c !important;
         border: 1px solid #2d3748 !important;
         border-radius: 4px !important;
     }
     div[data-baseweb="select"] span[data-baseweb="tag"] span,
     span[data-baseweb="tag"] span {
-        color: #f1f5f9 !important;
-        font-weight: 500 !important;
+        color: #e2e8f0 !important;
         font-size: 0.82rem !important;
     }
-    div[data-baseweb="select"] span[data-baseweb="tag"] svg,
-    span[data-baseweb="tag"] svg {
-        fill: #94a3b8 !important;
-    }
 
-    .cyber-title {
-        font-size: 2.1rem;
-        font-weight: 800;
-        letter-spacing: 1.5px;
-        background: linear-gradient(90deg, #ffffff 0%, #7dd3fc 60%, #38bdf8 100%);
-        -webkit-background-clip: text;
-        -webkit-text-fill-color: transparent;
+    .main-title {
+        font-size: 1.6rem;
+        font-weight: 600;
+        color: #f8fafc;
         margin-bottom: 2px;
     }
     
-    .cyber-caption {
+    .sub-title {
         color: #64748b;
-        font-size: 0.82rem;
-        letter-spacing: 1px;
-        text-transform: uppercase;
-        margin-bottom: 22px;
+        font-size: 0.85rem;
+        margin-bottom: 20px;
     }
 
-    .author-badge {
-        display: inline-block;
-        padding: 2px 10px;
-        border-radius: 20px;
+    .author-tag {
         font-size: 0.75rem;
-        color: #38bdf8;
-        background: rgba(56, 189, 248, 0.1);
-        border: 1px solid rgba(56, 189, 248, 0.3);
-        margin-left: 12px;
-        vertical-align: middle;
-        letter-spacing: 0.5px;
+        color: #94a3b8;
+        margin-left: 10px;
+        font-weight: normal;
     }
 
     .company-desc-card {
-        background: rgba(16, 20, 30, 0.6);
-        border: 1px solid rgba(56, 189, 248, 0.15);
-        border-radius: 8px;
+        background: #11151c;
+        border: 1px solid #1e2430;
+        border-radius: 6px;
         padding: 14px 18px;
         margin-top: 10px;
         margin-bottom: 20px;
         color: #cbd5e1;
         font-size: 0.88rem;
-        line-height: 1.7;
+        line-height: 1.6;
         white-space: pre-line;
     }
 
     div[data-testid="stMetric"] {
-        background: rgba(16, 20, 30, 0.65) !important;
-        border: 1px solid rgba(56, 189, 248, 0.2) !important;
-        border-radius: 8px;
+        background: #11151c !important;
+        border: 1px solid #1e2430 !important;
+        border-radius: 6px;
         padding: 10px 14px;
-        backdrop-filter: blur(12px);
     }
     div[data-testid="stMetricValue"] {
         color: #38bdf8 !important;
-        font-size: 1.35rem !important;
-        text-shadow: 0 0 12px rgba(56, 189, 248, 0.35);
+        font-size: 1.3rem !important;
     }
     div[data-testid="stMetricLabel"] {
         color: #94a3b8 !important;
-        font-size: 0.78rem !important;
-    }
-
-    .stDownloadButton button {
-        background: rgba(16, 20, 30, 0.8) !important;
-        color: #38bdf8 !important;
-        border: 1px solid rgba(56, 189, 248, 0.4) !important;
-        border-radius: 6px !important;
-        transition: 0.2s all;
-    }
-    .stDownloadButton button:hover {
-        background: rgba(56, 189, 248, 0.12) !important;
-        border-color: #38bdf8 !important;
-        color: #ffffff !important;
+        font-size: 0.8rem !important;
     }
 </style>
 """, unsafe_allow_html=True)
 
-# 顶部标题栏 + lzjppy 专属作者徽章
+# 顶部标题栏
 st.markdown("""
 <div>
-    <span class="cyber-title">⚡ S&P 500 QUANTITATIVE TERMINAL</span>
-    <span class="author-badge">DEV: lzjppy</span>
+    <span class="main-title">S&P 500 Equity Screener</span>
+    <span class="author-tag">lzjppy</span>
 </div>
-<div class="cyber-caption">标普500全量智能量化终端 // 深度指标雷达与技术走势穿透</div>
+<div class="sub-title">S&P 500 成分股数据筛选与个股行情分析</div>
 """, unsafe_allow_html=True)
 
 CSV_PATH = "sp500_data.csv"
 
 if not os.path.exists(CSV_PATH):
-    st.error("SYSTEM ERROR: 数据库未挂载，请先运行数据抓取脚本！")
+    st.error("数据文件未找到，请先运行数据抓取脚本。")
     st.stop()
 
 @st.cache_data(ttl=60)
@@ -223,35 +175,32 @@ def load_and_clean_data():
 
 df_raw = load_and_clean_data()
 
-# 侧边栏
-st.sidebar.markdown("<h4 style='color: #f1f5f9; letter-spacing: 0.5px;'>⚡ 因子控制矩阵</h4>", unsafe_allow_html=True)
+# 侧边栏：筛选条件
+st.sidebar.markdown("<h4 style='color: #f1f5f9; font-size: 1rem; margin-bottom: 12px;'>筛选条件</h4>", unsafe_allow_html=True)
 
 all_sectors = sorted([str(s) for s in df_raw["行业板块"].dropna().unique()])
-selected_sectors = st.sidebar.multiselect("行业板块 (SECTOR)", options=all_sectors, default=all_sectors)
+selected_sectors = st.sidebar.multiselect("行业板块", options=all_sectors, default=all_sectors)
 
-st.sidebar.markdown("<hr style='border: 1px solid rgba(255,255,255,0.06);'>", unsafe_allow_html=True)
-st.sidebar.markdown("<span style='color: #94a3b8; font-weight: 600; font-size: 0.85rem;'>📌 规模与估值模型</span>", unsafe_allow_html=True)
+st.sidebar.markdown("<hr style='border: 1px solid #1e2430;'>", unsafe_allow_html=True)
+st.sidebar.markdown("<span style='color: #94a3b8; font-size: 0.85rem;'>市值与估值</span>", unsafe_allow_html=True)
 max_cap = int(df_raw["市值 (十亿$)"].max(skipna=True) or 3000)
-selected_cap = st.sidebar.slider("最低市值 (十亿$)", min_value=0, max_value=max_cap, value=10, step=10)
+selected_cap = st.sidebar.slider("最低市值 (十亿美元)", min_value=0, max_value=max_cap, value=10, step=10)
 max_pe = st.sidebar.slider("最高滚动市盈率 (PE)", min_value=5.0, max_value=120.0, value=60.0, step=2.0)
 
-filter_peg = st.sidebar.checkbox("启用 PEG 估值洼地过滤 (< 1.5)")
-max_peg_val = st.sidebar.slider("最高 PEG 阈值", 0.5, 3.0, 1.5, 0.1) if filter_peg else None
+filter_peg = st.sidebar.checkbox("启用 PEG 过滤 (< 1.5)")
+max_peg_val = st.sidebar.slider("最高 PEG", 0.5, 3.0, 1.5, 0.1) if filter_peg else None
 
-st.sidebar.markdown("<hr style='border: 1px solid rgba(255,255,255,0.06);'>", unsafe_allow_html=True)
-st.sidebar.markdown("<span style='color: #94a3b8; font-weight: 600; font-size: 0.85rem;'>📈 盈利质量与成长</span>", unsafe_allow_html=True)
+st.sidebar.markdown("<hr style='border: 1px solid #1e2430;'>", unsafe_allow_html=True)
+st.sidebar.markdown("<span style='color: #94a3b8; font-size: 0.85rem;'>财务与成长性</span>", unsafe_allow_html=True)
 min_roe = st.sidebar.slider("最低 ROE (%)", -20.0, 60.0, 10.0, step=2.0)
-min_growth = st.sidebar.slider("最低营收增长率 (%)", -20.0, 60.0, 0.0, step=2.0)
+min_growth = st.sidebar.slider("最低营收增速 (%)", -20.0, 60.0, 0.0, step=2.0)
 min_dividend = st.sidebar.slider("最低股息率 (%)", 0.0, 8.0, 0.0, step=0.2)
 
-st.sidebar.markdown("<hr style='border: 1px solid rgba(255,255,255,0.06);'>", unsafe_allow_html=True)
-st.sidebar.markdown("<span style='color: #94a3b8; font-weight: 600; font-size: 0.85rem;'>📊 技术动量</span>", unsafe_allow_html=True)
-above_50ma = st.sidebar.checkbox("仅筛选站在 50 日均线之上")
+st.sidebar.markdown("<hr style='border: 1px solid #1e2430;'>", unsafe_allow_html=True)
+st.sidebar.markdown("<span style='color: #94a3b8; font-size: 0.85rem;'>技术面指标</span>", unsafe_allow_html=True)
+above_50ma = st.sidebar.checkbox("高于 50 日均线")
 
-st.sidebar.markdown("<br><br><hr style='border: 1px solid rgba(255,255,255,0.06);'>", unsafe_allow_html=True)
-st.sidebar.markdown("<div style='color: #64748b; font-size: 0.78rem; text-align: center;'>Architecture & Engineering<br><span style='color: #38bdf8; font-weight: 600;'>@lzjppy</span></div>", unsafe_allow_html=True)
-
-# 数据过滤
+# 数据过滤逻辑
 filtered = df_raw.copy()
 
 if selected_sectors:
@@ -272,14 +221,14 @@ if min_dividend > 0:
 if above_50ma:
     filtered = filtered[(filtered["偏离50日线 (%)"].notnull()) & (filtered["偏离50日线 (%)"] > 0)]
 
-# 指标看板
+# 统计概览
 c1, c2, c3 = st.columns(3)
-c1.metric("标普500 总量池", f"{len(df_raw)} 标的")
-c2.metric("当前符合条件", f"{len(filtered)} 标的")
-c3.metric("有效收敛率", f"{round(len(filtered) / len(df_raw) * 100, 1) if len(df_raw) > 0 else 0}%")
+c1.metric("标普500 总成分股", f"{len(df_raw)}")
+c2.metric("符合条件数量", f"{len(filtered)}")
+c3.metric("筛选占比", f"{round(len(filtered) / len(df_raw) * 100, 1) if len(df_raw) > 0 else 0}%")
 
 st.markdown("<div style='margin-top: 15px;'></div>", unsafe_allow_html=True)
-st.markdown("<span style='color: #f1f5f9; font-weight: 600;'>📋 量化筛选矩阵 // 标的高清图标</span>", unsafe_allow_html=True)
+st.markdown("<span style='color: #f1f5f9; font-weight: 500; font-size: 0.95rem;'>标的列表</span>", unsafe_allow_html=True)
 
 display_df = filtered.copy().reset_index(drop=True)
 display_df["标的"] = display_df["代码"].apply(get_stock_logo_url)
@@ -299,9 +248,9 @@ st.dataframe(
         "偏离50日线 (%)": "{:+.2f}%"
     }),
     column_config={
-        "标的": st.column_config.ImageColumn(label="Logo", width="small"),
-        "代码": st.column_config.TextColumn(label="TICKER", width="small"),
-        "公司名称": st.column_config.TextColumn(label="公司全称", width="medium"),
+        "标的": st.column_config.ImageColumn(label="", width="small"),
+        "代码": st.column_config.TextColumn(label="代码", width="small"),
+        "公司名称": st.column_config.TextColumn(label="公司名称", width="medium"),
         "市值 (十亿$)": st.column_config.NumberColumn(label="市值 (十亿$)", width="small")
     },
     use_container_width=True,
@@ -310,15 +259,15 @@ st.dataframe(
 )
 
 st.download_button(
-    label="⚡ 导出当前筛选数据矩阵 (CSV)",
+    label="导出当前数据 (CSV)",
     data=filtered.to_csv(index=False).encode('utf-8-sig'),
     file_name="SP500_Filtered.csv",
     mime="text/csv"
 )
 
-# 标的穿透与量化分析
-st.markdown("<hr style='border: 1px solid rgba(255, 255, 255, 0.08); margin-top: 35px; margin-bottom: 25px;'>", unsafe_allow_html=True)
-st.markdown("<h4 style='color: #f1f5f9; letter-spacing: 0.5px;'>🔍 标的穿透分析与技术走势</h4>", unsafe_allow_html=True)
+# 个股分析与行情走势
+st.markdown("<hr style='border: 1px solid #1e2430; margin-top: 30px; margin-bottom: 20px;'>", unsafe_allow_html=True)
+st.markdown("<h4 style='color: #f1f5f9; font-size: 1rem;'>个股分析与行情走势</h4>", unsafe_allow_html=True)
 
 available_tickers = filtered["代码"].tolist() if len(filtered) > 0 else df_raw["代码"].tolist()
 
@@ -349,5 +298,130 @@ if selected_ticker:
     logo_url = get_stock_logo_url(selected_ticker)
     company_name = str(stock_info_row["公司名称"])
     
-    # 优先使用即时结算价
-    current_price = live_price if live_price is not None else stock_
+    current_price = live_price if live_price is not None else stock_info_row['现价 ($)']
+
+    st.markdown(f"""
+    <div style="display: flex; align-items: center; gap: 14px; margin-bottom: 16px; background: #11151c; padding: 12px 18px; border-radius: 6px; border: 1px solid #1e2430;">
+        <img src="{logo_url}" onerror="this.onerror=null;this.src='https://ui-avatars.com/api/?name={selected_ticker}&background=181c26&color=38bdf8&rounded=true';" 
+             style="width: 40px; height: 40px; border-radius: 4px; object-fit: contain; background: #ffffff; padding: 4px;">
+        <div>
+            <div style="font-size: 1.3rem; font-weight: 600; color: #f8fafc;">
+                {selected_ticker} <span style="font-size: 1rem; color: #94a3b8; font-weight: 400; margin-left: 8px;">{company_name}</span>
+            </div>
+            <div style="font-size: 0.8rem; color: #64748b;">
+                {stock_info_row['行业板块']} | S&P 500
+            </div>
+        </div>
+    </div>
+    """, unsafe_allow_html=True)
+
+    beta_val = stock_info.get("beta", None)
+    beta_str = f"{beta_val:.2f}" if beta_val is not None else "--"
+
+    if not full_hist.empty and len(full_hist) >= 15:
+        rsi_series = calculate_rsi(full_hist["Close"])
+        latest_rsi = rsi_series.iloc[-1]
+        rsi_str = f"{latest_rsi:.1f}"
+    else:
+        rsi_str = "--"
+
+    # 指标第一行
+    col_k1, col_k2, col_k3, col_k4, col_k5 = st.columns(5)
+    col_k1.metric("最新价", f"${current_price:.2f}" if current_price else "--")
+    col_k2.metric("总市值", f"${stock_info_row['市值 (十亿$)' ]:.1f}B" if pd.notnull(stock_info_row['市值 (十亿$)']) else "--")
+    col_k3.metric("滚动 PE", f"{stock_info_row['滚动PE']}" if pd.notnull(stock_info_row['滚动PE']) else "--")
+    col_k4.metric("ROE", f"{stock_info_row['ROE (%)']}%" if pd.notnull(stock_info_row['ROE (%)']) else "--")
+    
+    div_val = stock_info_row['股息率 (%)']
+    col_k5.metric("股息率", f"{div_val:.2f}%" if pd.notnull(div_val) else "--")
+
+    # 指标第二行
+    c_sub1, c_sub2, c_sub3 = st.columns([1, 1, 2])
+    c_sub1.metric("Beta", beta_str)
+    c_sub2.metric("RSI (14)", rsi_str)
+    
+    week_high = stock_info.get("fiftyTwoWeekHigh", None)
+    week_low = stock_info.get("fiftyTwoWeekLow", None)
+    range_str = f"${week_low:.2f} ~ ${week_high:.2f}" if (week_high and week_low) else "--"
+    c_sub3.metric("52 周区间", range_str)
+
+    # 业务介绍
+    with st.expander(f"{selected_ticker} ({company_name}) 业务介绍", expanded=False):
+        summary_zh = get_company_summary_zh(selected_ticker)
+        st.markdown(f'<div class="company-desc-card">{summary_zh}</div>', unsafe_allow_html=True)
+
+    if not full_hist.empty:
+        full_hist["MA20"] = full_hist["Close"].rolling(window=20).mean()
+        full_hist["MA50"] = full_hist["Close"].rolling(window=50).mean()
+
+        period_days = {"1mo": 30, "3mo": 90, "6mo": 180, "1y": 365, "2y": 730, "5y": 1825}
+        days = period_days.get(selected_period, 365)
+        stock_hist = full_hist.tail(days).copy()
+
+        fig = make_subplots(
+            rows=2, cols=1,
+            shared_xaxes=True,
+            vertical_spacing=0.03,
+            row_heights=[0.75, 0.25]
+        )
+
+        fig.add_trace(
+            go.Candlestick(
+                x=stock_hist.index,
+                open=stock_hist["Open"],
+                high=stock_hist["High"],
+                low=stock_hist["Low"],
+                close=stock_hist["Close"],
+                name="K线",
+                increasing_line_color="#00e676",
+                decreasing_line_color="#ff5252"
+            ),
+            row=1, col=1
+        )
+
+        fig.add_trace(go.Scatter(x=stock_hist.index, y=stock_hist["MA20"], line=dict(color="#fadb14", width=1.5), name="MA20"), row=1, col=1)
+        fig.add_trace(go.Scatter(x=stock_hist.index, y=stock_hist["MA50"], line=dict(color="#38bdf8", width=1.5), name="MA50"), row=1, col=1)
+
+        colors = ["rgba(0, 230, 118, 0.5)" if c >= o else "rgba(255, 82, 82, 0.5)" for c, o in zip(stock_hist["Close"], stock_hist["Open"])]
+        fig.add_trace(
+            go.Bar(x=stock_hist.index, y=stock_hist["Volume"], marker_color=colors, name="成交量", showlegend=False),
+            row=2, col=1
+        )
+
+        fig.update_layout(
+            paper_bgcolor="#0b0e14",
+            plot_bgcolor="#11151c",
+            height=560,
+            margin=dict(l=10, r=20, t=25, b=10),
+            xaxis_rangeslider_visible=False,
+            hovermode="x unified",
+            font=dict(color="#94a3b8", family="sans-serif"),
+            legend=dict(
+                orientation="h",
+                yanchor="bottom",
+                y=1.02,
+                xanchor="right",
+                x=1,
+                bgcolor="rgba(0,0,0,0)"
+            )
+        )
+
+        fig.update_xaxes(
+            rangebreaks=[dict(bounds=["sat", "mon"])],
+            showgrid=True,
+            gridwidth=1,
+            gridcolor="#1e2430"
+        )
+        fig.update_yaxes(
+            showgrid=True,
+            gridwidth=1,
+            gridcolor="#1e2430",
+            side="right"
+        )
+
+        st.plotly_chart(fig, use_container_width=True)
+    else:
+        st.warning("暂无行情走势数据。")
+
+# 底部
+st.markdown("<div style='text-align: center; color: #475569; font-size: 0.75rem; margin-top: 40px; margin-bottom: 20px;'>S&P 500 Equity Screener | Built by lzjppy</div>", unsafe_allow_html=True)
