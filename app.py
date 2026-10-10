@@ -55,6 +55,24 @@ def calculate_rsi(series, period=14):
     rsi = 100 - (100 / (1 + rs))
     return rsi
 
+# 精准修复股息率异常逻辑（识别小数与误放大的情况）
+def clean_dividend(val):
+    if pd.isna(val) or val is None:
+        return 0.0
+    try:
+        val = float(val)
+        if val <= 0:
+            return 0.0
+        # 若为小数表示（如 0.0188 表示 1.88%，0.0009 表示 0.09%）
+        if val < 0.15:
+            return round(val * 100.0, 2)
+        # 美股标普500成分股现金股息率基本不会超过 12%，被误放大100倍的科技股（如 MRVL 9.0、MU 6.0）做回归处理
+        if val > 12.0:
+            return round(val / 100.0, 2)
+        return round(val, 2)
+    except Exception:
+        return 0.0
+
 # 复合暗黑微光与多层渐变样式
 st.markdown("""
 <style>
@@ -184,13 +202,6 @@ if not os.path.exists(CSV_PATH):
     st.error("SYSTEM ERROR: 数据库未挂载，请先运行数据抓取脚本！")
     st.stop()
 
-def clean_dividend(val):
-    if pd.isna(val) or val is None or val <= 0:
-        return 0.0
-    if val >= 10.0:
-        return round(val / 100.0, 2)
-    return round(float(val), 2)
-
 @st.cache_data(ttl=60)
 def load_and_clean_data():
     df = pd.read_csv(CSV_PATH)
@@ -210,34 +221,20 @@ st.sidebar.markdown("<hr style='border: 1px solid rgba(255,255,255,0.06);'>", un
 st.sidebar.markdown("<span style='color: #94a3b8; font-weight: 600; font-size: 0.85rem;'>📌 规模与估值模型</span>", unsafe_allow_html=True)
 max_cap = int(df_raw["市值 (十亿$)"].max(skipna=True) or 3000)
 selected_cap = st.sidebar.slider("最低市值 (十亿$)", min_value=0, max_value=max_cap, value=10, step=10)
+max_pe = st.sidebar.slider("最高滚动市盈率 (PE)", min_value=5.0, max_value=120.0, value=60.0, step=2.0)
 
-# 亏损企业筛选开关
-only_loss_making = st.sidebar.checkbox("🚨 仅查看当前亏损企业 (PE为N/A 或 ROE<0)", value=False)
-
-if not only_loss_making:
-    max_pe = st.sidebar.slider("最高滚动市盈率 (PE)", min_value=5.0, max_value=120.0, value=60.0, step=2.0)
-    filter_peg = st.sidebar.checkbox("启用 PEG 估值洼地过滤 (< 1.5)")
-    max_peg_val = st.sidebar.slider("最高 PEG 阈值", 0.5, 3.0, 1.5, 0.1) if filter_peg else None
-else:
-    max_pe = None
-    filter_peg = False
-    max_peg_val = None
+filter_peg = st.sidebar.checkbox("启用 PEG 估值洼地过滤 (< 1.5)")
+max_peg_val = st.sidebar.slider("最高 PEG 阈值", 0.5, 3.0, 1.5, 0.1) if filter_peg else None
 
 st.sidebar.markdown("<hr style='border: 1px solid rgba(255,255,255,0.06);'>", unsafe_allow_html=True)
 st.sidebar.markdown("<span style='color: #94a3b8; font-weight: 600; font-size: 0.85rem;'>📈 盈利质量与成长</span>", unsafe_allow_html=True)
-
-if not only_loss_making:
-    min_roe = st.sidebar.slider("最低 ROE (%)", -20.0, 60.0, 10.0, step=2.0)
-else:
-    min_roe = None
-    st.sidebar.caption("⚠️ 已开启亏损企业模式：已放开 ROE 限制")
-
+min_roe = st.sidebar.slider("最低 ROE (%)", -20.0, 60.0, 10.0, step=2.0)
 min_growth = st.sidebar.slider("最低营收增长率 (%)", -20.0, 60.0, 0.0, step=2.0)
 min_dividend = st.sidebar.slider("最低股息率 (%)", 0.0, 8.0, 0.0, step=0.2)
 
 st.sidebar.markdown("<hr style='border: 1px solid rgba(255,255,255,0.06);'>", unsafe_allow_html=True)
 st.sidebar.markdown("<span style='color: #94a3b8; font-weight: 600; font-size: 0.85rem;'>📊 技术动量</span>", unsafe_allow_html=True)
-above_50ma = st.sidebar.checkbox("仅站在 50 日均线之上")
+above_50ma = st.sidebar.checkbox("仅筛选站在 50 日均线之上")
 
 st.sidebar.markdown("<br><br><hr style='border: 1px solid rgba(255,255,255,0.06);'>", unsafe_allow_html=True)
 st.sidebar.markdown("<div style='color: #64748b; font-size: 0.78rem; text-align: center;'>Architecture & Engineering<br><span style='color: #38bdf8; font-weight: 600;'>@lzjppy</span></div>", unsafe_allow_html=True)
@@ -249,21 +246,12 @@ if selected_sectors:
     filtered = filtered[filtered["行业板块"].isin(selected_sectors)]
 
 filtered = filtered[(filtered["市值 (十亿$)"].notnull()) & (filtered["市值 (十亿$)"] >= selected_cap)]
+filtered = filtered[(filtered["滚动PE"].isnull()) | (filtered["滚动PE"] <= max_pe)]
 
-if only_loss_making:
-    is_loss = (
-        filtered["滚动PE"].isnull() | 
-        (filtered["滚动PE"] < 0) | 
-        (filtered["ROE (%)"] < 0)
-    )
-    filtered = filtered[is_loss]
-else:
-    filtered = filtered[(filtered["滚动PE"].isnull()) | (filtered["滚动PE"] <= max_pe)]
-    if filter_peg and max_peg_val:
-        filtered = filtered[(filtered["PEG"].notnull()) & (filtered["PEG"] <= max_peg_val)]
-    if min_roe is not None:
-        filtered = filtered[(filtered["ROE (%)"].isnull()) | (filtered["ROE (%)"] >= min_roe)]
+if filter_peg and max_peg_val:
+    filtered = filtered[(filtered["PEG"].notnull()) & (filtered["PEG"] <= max_peg_val)]
 
+filtered = filtered[(filtered["ROE (%)"].isnull()) | (filtered["ROE (%)"] >= min_roe)]
 filtered = filtered[(filtered["营收增速 (%)"].isnull()) | (filtered["营收增速 (%)"] >= min_growth)]
 
 if min_dividend > 0:
@@ -278,6 +266,9 @@ c1.metric("标普500 总量池", f"{len(df_raw)} 标的")
 c2.metric("当前符合条件", f"{len(filtered)} 标的")
 c3.metric("有效收敛率", f"{round(len(filtered) / len(df_raw) * 100, 1) if len(df_raw) > 0 else 0}%")
 
+st.markdown("<div style='margin-top: 15px;'></div>", unsafe_allow_html=True)
+st.markdown("<span style='color: #f1f5f9; font-weight: 600;'>📋 量化筛选矩阵 // 标的高清图标</span>", unsafe_allow_html=True)
+
 display_df = filtered.copy().reset_index(drop=True)
 display_df["标的"] = display_df["代码"].apply(get_stock_logo_url)
 
@@ -289,11 +280,11 @@ st.dataframe(
     display_df.style.format({
         "现价 ($)": "${:.2f}",
         "市值 (十亿$)": "${:.1f}B",
-        "滚动PE": lambda x: f"{x:.1f}" if pd.notnull(x) else "N/A",
-        "ROE (%)": lambda x: f"{x:.1f}%" if pd.notnull(x) else "--",
-        "营收增速 (%)": lambda x: f"{x:.1f}%" if pd.notnull(x) else "--",
+        "滚动PE": "{:.1f}",
+        "ROE (%)": "{:.1f}%",
+        "营收增速 (%)": "{:.1f}%",
         "股息率 (%)": "{:.2f}%",
-        "偏离50日线 (%)": lambda x: f"{x:+.2f}%" if pd.notnull(x) else "--"
+        "偏离50日线 (%)": "{:+.2f}%"
     }),
     column_config={
         "标的": st.column_config.ImageColumn(label="Logo", width="small"),
@@ -325,7 +316,6 @@ with col_select:
 with col_period:
     selected_period = st.selectbox("走势周期：", options=["1mo", "3mo", "6mo", "1y", "2y", "5y"], index=3)
 
-# 实时获取 K 线历史 + fast_info 盘口实时结算价
 @st.cache_data(ttl=60)
 def fetch_stock_deep_data(ticker, period):
     t = yf.Ticker(ticker)
@@ -347,137 +337,5 @@ if selected_ticker:
     logo_url = get_stock_logo_url(selected_ticker)
     company_name = str(stock_info_row["公司名称"])
     
-    # 优先使用即时结算价，杜绝旧 CSV 缓存
-    current_price = live_price if live_price is not None else stock_info_row['现价 ($)']
-
-    # 顶部 TradingView 风格铭牌
-    st.markdown(f"""
-    <div style="display: flex; align-items: center; gap: 16px; margin-bottom: 16px; background: rgba(16, 20, 30, 0.7); padding: 14px 22px; border-radius: 10px; border: 1px solid rgba(56, 189, 248, 0.2); box-shadow: 0 4px 15px rgba(0,0,0,0.3);">
-        <img src="{logo_url}" onerror="this.onerror=null;this.src='https://ui-avatars.com/api/?name={selected_ticker}&background=181c26&color=38bdf8&rounded=true';" 
-             style="width: 48px; height: 48px; border-radius: 50%; object-fit: contain; background: #ffffff; padding: 5px; border: 1px solid rgba(255,255,255,0.15); box-shadow: 0 0 12px rgba(56, 189, 248, 0.25);">
-        <div>
-            <div style="font-size: 1.5rem; font-weight: 700; color: #f1f5f9; letter-spacing: 0.5px; margin-bottom: 2px;">
-                {selected_ticker} <span style="font-size: 1.1rem; color: #94a3b8; font-weight: 400; margin-left: 10px;">{company_name}</span>
-            </div>
-            <div style="font-size: 0.8rem; color: #38bdf8; text-transform: uppercase; letter-spacing: 1px;">
-                {stock_info_row['行业板块']} // 标普500 成分股 (S&P 500)
-            </div>
-        </div>
-    </div>
-    """, unsafe_allow_html=True)
-
-    beta_val = stock_info.get("beta", None)
-    beta_str = f"{beta_val:.2f}" if beta_val is not None else "--"
-
-    if not full_hist.empty and len(full_hist) >= 15:
-        rsi_series = calculate_rsi(full_hist["Close"])
-        latest_rsi = rsi_series.iloc[-1]
-        rsi_str = f"{latest_rsi:.1f}"
-    else:
-        rsi_str = "--"
-
-    pe_val = stock_info_row['滚动PE']
-    pe_display = f"{pe_val:.1f}" if pd.notnull(pe_val) else "N/A"
-
-    roe_val = stock_info_row['ROE (%)']
-    roe_display = f"{roe_val:.1f}%" if pd.notnull(roe_val) else "--"
-
-    # 第一层指标看板（实时最新价绑定）
-    col_k1, col_k2, col_k3, col_k4, col_k5 = st.columns(5)
-    col_k1.metric("最新股价", f"${current_price:.2f}" if current_price else "--")
-    col_k2.metric("总市值", f"${stock_info_row['市值 (十亿$)' ]:.1f}B" if pd.notnull(stock_info_row['市值 (十亿$)']) else "--")
-    col_k3.metric("滚动 PE", pe_display)
-    col_k4.metric("ROE (净资产收益率)", roe_display)
-    col_k5.metric("股息率", f"{stock_info_row['股息率 (%)']:.2f}%" if pd.notnull(stock_info_row['股息率 (%)']) else "--")
-
-    # 第二层专属深度指标（Beta 波动系数 + RSI 相对强弱 + 52周高低）
-    c_sub1, c_sub2, c_sub3 = st.columns([1, 1, 2])
-    c_sub1.metric("Beta (市场弹性)", beta_str, help="Beta>1 表示弹性高于大盘；Beta<1 表示防御型标的")
-    c_sub2.metric("RSI-14 (相对强弱)", rsi_str, help="RSI>70 进入超买区，RSI<30 进入超卖区")
-    
-    week_high = stock_info.get("fiftyTwoWeekHigh", None)
-    week_low = stock_info.get("fiftyTwoWeekLow", None)
-    range_str = f"${week_low:.2f} ~ ${week_high:.2f}" if (week_high and week_low) else "--"
-    c_sub3.metric("52 周价格运行区间", range_str)
-
-    # 中文/原文业务简介模块
-    with st.expander(f"📖 查看 {selected_ticker} ({company_name}) 业务概况与主营介绍", expanded=False):
-        summary_zh = get_company_summary_zh(selected_ticker)
-        st.markdown(f'<div class="company-desc-card">{summary_zh}</div>', unsafe_allow_html=True)
-
-    if not full_hist.empty:
-        full_hist["MA20"] = full_hist["Close"].rolling(window=20).mean()
-        full_hist["MA50"] = full_hist["Close"].rolling(window=50).mean()
-
-        period_days = {"1mo": 30, "3mo": 90, "6mo": 180, "1y": 365, "2y": 730, "5y": 1825}
-        days = period_days.get(selected_period, 365)
-        stock_hist = full_hist.tail(days).copy()
-
-        fig = make_subplots(
-            rows=2, cols=1,
-            shared_xaxes=True,
-            vertical_spacing=0.03,
-            row_heights=[0.75, 0.25]
-        )
-
-        fig.add_trace(
-            go.Candlestick(
-                x=stock_hist.index,
-                open=stock_hist["Open"],
-                high=stock_hist["High"],
-                low=stock_hist["Low"],
-                close=stock_hist["Close"],
-                name="K线 (OHLC)",
-                increasing_line_color="#00e676",
-                decreasing_line_color="#ff5252"
-            ),
-            row=1, col=1
-        )
-
-        fig.add_trace(go.Scatter(x=stock_hist.index, y=stock_hist["MA20"], line=dict(color="#fadb14", width=1.6), name="MA20 (月线)"), row=1, col=1)
-        fig.add_trace(go.Scatter(x=stock_hist.index, y=stock_hist["MA50"], line=dict(color="#38bdf8", width=1.6), name="MA50 (季线)"), row=1, col=1)
-
-        colors = ["rgba(0, 230, 118, 0.55)" if c >= o else "rgba(255, 82, 82, 0.55)" for c, o in zip(stock_hist["Close"], stock_hist["Open"])]
-        fig.add_trace(
-            go.Bar(x=stock_hist.index, y=stock_hist["Volume"], marker_color=colors, name="成交量", showlegend=False),
-            row=2, col=1
-        )
-
-        fig.update_layout(
-            paper_bgcolor="rgba(0,0,0,0)",
-            plot_bgcolor="rgba(11, 14, 23, 0.75)",
-            height=600,
-            margin=dict(l=10, r=20, t=25, b=10),
-            xaxis_rangeslider_visible=False,
-            hovermode="x unified",
-            font=dict(color="#94a3b8", family="monospace"),
-            legend=dict(
-                orientation="h",
-                yanchor="bottom",
-                y=1.02,
-                xanchor="right",
-                x=1,
-                bgcolor="rgba(0,0,0,0)"
-            )
-        )
-
-        fig.update_xaxes(
-            rangebreaks=[dict(bounds=["sat", "mon"])],
-            showgrid=True,
-            gridwidth=1,
-            gridcolor="rgba(255, 255, 255, 0.04)"
-        )
-        fig.update_yaxes(
-            showgrid=True,
-            gridwidth=1,
-            gridcolor="rgba(255, 255, 255, 0.04)",
-            side="right"
-        )
-
-        st.plotly_chart(fig, use_container_width=True)
-    else:
-        st.warning("暂未获取到该标的的历史走势数据。")
-
-# 页面底部全局作者水印
-st.markdown("<br><hr style='border: 1px solid rgba(255,255,255,0.06);'>", unsafe_allow_html=True)
-st.markdown("<div style='text-align: center; color: #475569; font-size: 0.8rem; letter-spacing: 1px;'>DESIGNED & ENGINEERED BY <span style='color: #38bdf8; font-weight: 600;'>LZJPPY</span> // QUANT TERMINAL</div><br>", unsafe_allow_html=True)
+    # 优先使用即时结算价
+    current_price = live_price if live_price is not None else stock_
