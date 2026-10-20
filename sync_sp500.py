@@ -4,7 +4,7 @@ import requests
 import pandas as pd
 import yfinance as yf
 from datetime import datetime
-from concurrent.futures import ThreadPoolExecutor
+from concurrent.futures import ThreadPoolExecutor, as_completed
 
 def get_sp500_table():
     """获取成分股基准池"""
@@ -106,4 +106,22 @@ def sync_data():
     print(f"[{datetime.now()}] 3. 并发解析全量因子与真实股息率...")
     results = []
     with ThreadPoolExecutor(max_workers=20) as executor:
-        futures = [executor.submit(fetch_details, row, hist_data) for _, row in base_df.iterrows
+        futures = [executor.submit(fetch_details, row, hist_data) for _, row in base_df.iterrows()]
+        for future in as_completed(futures):
+            res = future.result()
+            if res is not None:
+                results.append(res)
+
+    print(f"[{datetime.now()}] 4. 整理并导出 CSV 文件...")
+    final_df = pd.DataFrame(results)
+    if not final_df.empty:
+        # 按市值降序排列并输出到你 workflow 指定的 sp500_data.csv
+        if "市值 (十亿$)" in final_df.columns:
+            final_df = final_df.sort_values(by="市值 (十亿$)", ascending=False)
+        final_df.to_csv("sp500_data.csv", index=False, encoding="utf-8-sig")
+        print(f"[{datetime.now()}] 同步成功！共保存 {len(final_df)} 条记录。")
+    else:
+        raise RuntimeError("未能获取到任何有效股票数据，任务终止。")
+
+if __name__ == "__main__":
+    sync_data()
